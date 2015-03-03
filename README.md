@@ -12,9 +12,17 @@ Usage
 ### Parameters
 
     -h, --help              Show help message
+    -b BEGIN_DATE, --begin BEGIN_DATE
+                            Begin timesheet on YYYY-MM-DD, default = 1970-01-01
+    -e END_DATE, --end END_DATE 
+                            End time accounting on YYYY-MM-DD, default = today
+     -p {this-day,this-week,this-month,this-year,last-day,last-week,last-month,last-year}, --period {this-day,this-week,this-month,this-year,last-day,last-week,last-month,last-year}
+                            Period (overrides dates)
     -c, --csv               Print output in CSV format
     -n, --null              Print also tasks without time information (default: no)
     -t, --task [cmd]        Change task command
+    -v, --version           Print version and exit
+
 
 Prepare taskwarrior
 -------------------
