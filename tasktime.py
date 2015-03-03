@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 # Copyright (c) 2012 Sven Hertle <sven.hertle@googlemail.com>
 
 import sys
@@ -7,6 +6,7 @@ import subprocess
 import json
 import re
 import datetime
+import argparse
 
 #
 # Calculations
@@ -14,9 +14,7 @@ import datetime
 
 class Calculator:
     printer = None
-
     task_cmd = "task"
-
     print_null = False
 
     def __init__(self):
@@ -28,8 +26,8 @@ class Calculator:
     def setTaskCmd(self, task_cmd):
         self.task_cmd = task_cmd
     
-    def setPrintNull(self, print_null):
-        self.print_null = print_null
+    def setPrintNull(self):
+        self.print_null = True
 
     def create_statistic(self, project):
         if self.printer == None:
@@ -167,7 +165,6 @@ class ReadablePrinter(Printer):
         print()
         print("Sum: " + self.seconds_to_readable(seconds))
 
-# Help
 def print_help():
     print(sys.argv[0] + " [parameters...] <project>")
     print()
@@ -184,36 +181,29 @@ def print_help():
 #
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        "Display total activity time for taskwarrior projects")
+    parser.add_argument("-c", "--csv", help="Print output in CSV format",
+                        action="store_true")
+    parser.add_argument("-n", "--null", 
+        help="Print also tasks without time information (default: no)",
+        action="store_true")
+    parser.add_argument("-t", "--task",
+                        help="specify task command (default : \"task\")",
+                        dest="task_cmd",
+                        default="task")
+    parser.add_argument("project", 
+                        help="Project for which the active time is computed")
+    args = parser.parse_args()
+
     params = sys.argv[1:]
     
     c = Calculator()
+    if args.task_cmd != None:
+        c.setTaskCmd(args.task_cmd)
+    if args.csv:
+        c.setPrinter(CSVPrinter())
+    if args.null:
+        c.setPrintNull()
 
-    project = None
-    show_help = False
-
-    skip = False
-    for i,param in enumerate(params):
-        if skip:
-            skip = False
-            continue
-
-        if param == "--csv" or param == "-c":
-            c.setPrinter(CSVPrinter())
-        elif param == "--help" or param == "-h":
-            show_help = True
-        elif param == "--task" or param == "-t":
-            if i == len(params)-1: # Last parameter -> error
-                print("--task needs another parameter")
-                sys.exit(1)
-            else:
-                c.setTaskCmd(params[i+1])
-                skip = True
-        elif param == "--null" or param == "-n":
-            c.setPrintNull(True)
-        elif i == len(params)-1: # Last parameter
-            project = param
-
-    if show_help or project == None:
-        print_help()
-    else:
-        c.create_statistic(project)
+    c.create_statistic(args.project)
