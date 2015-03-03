@@ -7,7 +7,7 @@ tasktime
 Usage
 -----
 
-    ./tasktime.py [parameters...] <project>
+    ./tasktime.py [parameters...]
 
 ### Parameters
 
@@ -22,6 +22,15 @@ Usage
     -n, --null              Print also tasks without time information (default: no)
     -t, --task [cmd]        Change task command
     -v, --version           Print version and exit
+  --full                    print full task breakdown (default : only print
+                            totals)
+  --project PROJECT         Project for which the active time is computed
+                            Contrary to previous versions, this is optional :
+                            By default, all projects that had an activity
+                            within the given timespan will be taken into
+                            account.
+  -x EXCLUDE, --exclude EXCLUDE
+                            Exclude project (may be used more than once)
 
 
 Prepare taskwarrior
@@ -48,6 +57,8 @@ Example:
 
 Examples
 --------
+
+TODO : add v2 examples.
 
 ### Default output
 

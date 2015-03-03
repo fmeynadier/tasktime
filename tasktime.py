@@ -18,6 +18,9 @@ class Calculator:
     printer = None
     task_cmd = "task"
     print_null = False
+    print_full = False
+    project = None
+    excl_projs = []
 
     def __init__(self):
         self.printer = ReadablePrinter()
@@ -30,6 +33,16 @@ class Calculator:
     
     def setPrintNull(self):
         self.print_null = True
+
+    def setPrintFull(self):
+        self.print_full = True
+
+    def setProject(self, project):
+        self.project = project
+
+    def setExclProj(self, proj_list):
+        for proj in proj_list:
+            self.excl_projs.append(proj)
 
     def setEndDate(self, end_date_string):
         """ Format : YYYY-MM-DD"""
@@ -101,11 +114,18 @@ class Calculator:
 
         # Get data from taskwarrior
         try:
-            json_tmp = subprocess.check_output([self.task_cmd, 
-                                                "export", 
-                                                "pro:" + project,
-                                                "rc.json.array=on",
-                                               ])
+            if self.project!=None:
+                # Only export tasks from the specified project
+                json_tmp = subprocess.check_output([self.task_cmd, 
+                                                    "export", 
+                                                    "pro:" + self.project,
+                                                    "rc.json.array=on",
+                                                    ])
+            else:
+                # Otherwise import all
+                json_tmp = subprocess.check_output([self.task_cmd, 
+                                                    "export", 
+                                                    "rc.json.array=on"])
         except OSError as e:
             print(str(e))
             sys.exit(1)
@@ -120,20 +140,48 @@ class Calculator:
         tasks = json.loads(json_str)
 
         # Print data
-        self.printer.print_header(project)
-        time = self.handle_tasks(tasks)
-        self.printer.print_result(time)
+        (counter, breakdown) = self.handle_tasks(tasks)
+        total_time = 0
+        self.printer.print_period(self.begin_date, self.end_date)
+        for proj in sorted(counter.keys()):
+            if counter[proj] == 0:
+                continue
+            total_time += counter[proj]
+            if self.print_full :
+                self.printer.print_header(proj)
+                for t in breakdown[proj] :
+                    self.printer.print_task(t["desc"],
+                                            t["time"])
+                self.printer.print_result(proj,counter[proj])
+        self.printer.print_overall_results(counter, total_time)
+
+
 
     def handle_tasks(self, tasks):
-        seconds = 0
+        counter = {}
+        breakdown = {}
         for t in tasks:
             tmp_seconds = self.get_task_time(t)
-            seconds += tmp_seconds
+            proj = self.get_task_project(t)
+            if proj in self.excl_projs :
+                continue
+            if tmp_seconds != 0 or self.print_null :
+                # If this is the first task found for this project, 
+                # initialize counter and breakdown structure
+                if proj not in counter :
+                    counter[proj] = 0
+                    breakdown[proj] = []
 
-            if self.print_null or tmp_seconds != 0:
-                self.printer.print_task(t["description"], tmp_seconds)
+                counter[proj] += tmp_seconds
+                breakdown[proj].append({"desc":t["description"],
+                                        "time":tmp_seconds})
+        return (counter, breakdown)
 
-        return seconds
+    def get_task_project(self, task):
+        if "project" in task:
+            return task["project"]
+        else :
+            return "none"
 
     def get_task_time(self, task):
         seconds = 0
@@ -235,6 +283,12 @@ class CSVPrinter(Printer):
         print("\"\",\"\"")
         print("\"Sum\",\"" + self.seconds_to_readable(seconds) + "\"")
 
+    def print_overall_results(self, counter, total_time):
+        # No use for CSV
+        pass
+
+
+
 # Readable
 class ReadablePrinter(Printer):
     def print_period(self, from_date, to_date):
@@ -256,9 +310,24 @@ class ReadablePrinter(Printer):
         if seconds != 0:
             print("\tDuration: " + self.seconds_to_readable(seconds))
 
-    def print_result(self, seconds):
+    def print_result(self, project, seconds):
         print()
-        print("Sum: " + self.seconds_to_readable(seconds))
+        print("Total time on project " + project + " : " 
+              + self.seconds_to_readable(seconds))
+        print("-------------------------------------------------------")
+
+    def print_overall_results(self, counter, total_time):
+        print("Project / Total time on project / percentage")
+        for proj in sorted(counter.keys()) :
+            if counter[proj] == 0 :
+                continue
+            print("{0:20s} {1:10s} {2:3d}%".format(
+                proj,
+                self.seconds_to_readable(counter[proj]),
+                int(100*counter[proj]/total_time)))
+        print("Total time : " + self.seconds_to_readable(total_time))
+
+
 
 #
 # Main
@@ -298,8 +367,15 @@ if __name__ == "__main__":
                         help="Print version and exit",
                         action="version",
                         version='{version}'.format(version=__version__))
-    parser.add_argument("project", 
+    parser.add_argument("--full", 
+                        help=("print full task breakdown" +
+                              " (default : only print totals)"),
+                        action="store_true")
+    parser.add_argument("--project", 
                         help="Project for which the active time is computed")
+    parser.add_argument("-x", "--exclude", action='append',
+                        help="Exclude project (may be used more than once)"
+                       )
     args = parser.parse_args()
 
     params = sys.argv[1:]
@@ -312,6 +388,13 @@ if __name__ == "__main__":
         c.setPrinter(CSVPrinter())
     if args.null:
         c.setPrintNull()
+    if args.full :
+        c.setPrintFull()
+    if args.project != None :
+        c.setProject(args.project)
+    if args.exclude != None :
+        c.setExclProj(args.exclude)
+
 
     c.setBeginDate(args.begin_date)
     c.setEndDate(args.end_date)
