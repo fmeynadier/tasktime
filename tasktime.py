@@ -10,6 +10,10 @@ import re
 import datetime
 import argparse
 
+# For use with yatwtt (https://github.com/fmeynadier/yatwtt) hook
+TIME_FORMAT = '%Y%m%dT%H%M%SZ'
+UDA_KEY = 'timetracking'
+
 #
 # Calculations
 #
@@ -116,16 +120,22 @@ class Calculator:
         try:
             if self.project!=None:
                 # Only export tasks from the specified project
+                # If this gives error, put
+                # json.array=on 
+                # in your .taskrc 
+                # or uncomment "rc.json.array=on" (but this will print 
+                # a "configuration override" warning).
                 json_tmp = subprocess.check_output([self.task_cmd, 
                                                     "export", 
                                                     "pro:" + self.project,
-                                                    "rc.json.array=on",
+                                                    #"rc.json.array=on",
                                                     ])
             else:
                 # Otherwise import all
                 json_tmp = subprocess.check_output([self.task_cmd, 
                                                     "export", 
-                                                    "rc.json.array=on"])
+                                                    #"rc.json.array=on",
+                                                   ])
         except OSError as e:
             print(str(e))
             sys.exit(1)
@@ -136,6 +146,11 @@ class Calculator:
         # Make valid JSON
         json_str=str(json_tmp, encoding="utf8")
 
+        # TEMP FIX for export bug
+        #ofl = open("test.json","w")
+        #ofl.write(json_str)
+        #ofl.close()
+        json_str = json_str.replace('urgency":H','urgency":"H"')
         # Parse JSON
         tasks = json.loads(json_str)
 
@@ -186,6 +201,7 @@ class Calculator:
     def get_task_time(self, task):
         seconds = 0
 
+        # If timetracking is stored in annotations
         last_start = ""
         if "annotations" in task:
             annotations = task["annotations"]
@@ -194,7 +210,24 @@ class Calculator:
                     last_start = a["entry"]
                 elif a["description"] == "Stopped task":
                     seconds += self.calc_time_delta(last_start, a["entry"])
-
+        # If timetracking is stored in a custom UDA
+        # expected format :
+        # start_timestamp1-stop_timestamp1;start_timestamp2-...
+        if UDA_KEY in task:
+            tt_ranges = task[UDA_KEY].split(";")
+            for rng in tt_ranges:
+                if rng == "":
+                    # UDA is empty, or we have reached the last item for 
+                    # a currently stopped task
+                    continue
+                elif rng[-1] == "-":
+                    # This task is currently active
+                    now = datetime.datetime.now().strftime(TIME_FORMAT)
+                    start = rng.split('-')[0]
+                    seconds += self.calc_time_delta(start, now)
+                else:
+                    start, stop = rng.split('-')
+                    seconds += self.calc_time_delta(start, stop)
         return seconds
 
     def calc_time_delta(self, start, stop):
